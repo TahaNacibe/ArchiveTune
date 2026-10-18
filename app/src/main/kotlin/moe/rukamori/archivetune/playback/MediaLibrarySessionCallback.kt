@@ -93,6 +93,7 @@ class MediaLibrarySessionCallback
         var toggleLike: () -> Unit = {}
         var toggleStartRadio: () -> Unit = {}
         var toggleLibrary: () -> Unit = {}
+        var dismissPlayback: () -> Unit = {}
         var carMediaButtonPreferences: (AndroidAutoConfiguration) -> List<CommandButton> = { emptyList() }
 
         private data class AutoPlaylistSortOption(
@@ -139,6 +140,7 @@ class MediaLibrarySessionCallback
                 .add(MediaSessionConstants.CommandToggleLibrary)
                 .add(MediaSessionConstants.CommandToggleShuffle)
                 .add(MediaSessionConstants.CommandToggleRepeatMode)
+                .add(MediaSessionConstants.CommandDismissPlayback)
                 .build()
             return if (session.isAutoCompanionController(controller) || session.isAutomotiveController(controller)) {
                 val carButtons = carMediaButtonPreferences(androidAutoSettings.currentConfiguration())
@@ -246,6 +248,10 @@ class MediaLibrarySessionCallback
 
                 MediaSessionConstants.ACTION_TOGGLE_REPEAT_MODE -> {
                     session.player.toggleRepeatMode()
+                    true
+                }
+                MediaSessionConstants.ACTION_DISMISS_PLAYBACK -> {
+                    dismissPlayback()
                     true
                 }
                 else -> false

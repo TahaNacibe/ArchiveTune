@@ -87,6 +87,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.CompositionLocalProvider
 import moe.rukamori.archivetune.ui.component.LocalMenuState
+import moe.rukamori.archivetune.LocalPlayerConnection
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -159,10 +160,12 @@ import moe.rukamori.archivetune.ui.component.BottomSheetPageState
 import moe.rukamori.archivetune.ui.component.BottomSheetState
 import moe.rukamori.archivetune.ui.component.MenuState
 import moe.rukamori.archivetune.ui.component.PlayerSliderTrack
+import moe.rukamori.archivetune.ui.component.WaveformSliderTrack
 import moe.rukamori.archivetune.ui.component.ResizableIconButton
 import moe.rukamori.archivetune.ui.menu.PlayerMenu
 import moe.rukamori.archivetune.ui.theme.PlayerBackgroundColorUtils
 import moe.rukamori.archivetune.ui.theme.PlayerSliderColors
+import com.google.common.collect.ImmutableList
 import moe.rukamori.archivetune.ui.utils.ShowMediaInfo
 import moe.rukamori.archivetune.ui.utils.highRes
 import moe.rukamori.archivetune.utils.makeTimeString
@@ -753,6 +756,7 @@ fun PlayerTopActions(
 @Composable
 fun PlayerSlider(
     sliderStyle: SliderStyle,
+    waveformAmplitudes: ImmutableList<Float>?,
     sliderPosition: Long?,
     position: Long,
     duration: Long,
@@ -766,6 +770,7 @@ fun PlayerSlider(
 
     StyledPlaybackSlider(
         sliderStyle = sliderStyle,
+        waveformAmplitudes = waveformAmplitudes,
         value = safeValue,
         valueRange = 0f..maxOf(1f, safeDuration),
         onValueChange = { onValueChange(it.toLong()) },
@@ -776,10 +781,23 @@ fun PlayerSlider(
     )
 }
 
+private fun Modifier.playPauseClickable(
+    player: Player,
+    onClick: () -> Unit,
+): Modifier =
+    combinedClickable(
+        onClick = onClick,
+        onLongClick = {
+            val currentIndex = player.currentMediaItemIndex
+            if (currentIndex >= 0) player.seekTo(currentIndex, 0L)
+        },
+    )
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StyledPlaybackSlider(
     sliderStyle: SliderStyle,
+    waveformAmplitudes: ImmutableList<Float>? = null,
     value: Float,
     valueRange: ClosedFloatingPointRange<Float>,
     onValueChange: (Float) -> Unit,
@@ -868,6 +886,36 @@ fun StyledPlaybackSlider(
                 },
                 modifier = modifier,
             )
+        }
+
+        SliderStyle.Waveform -> {
+            if (waveformAmplitudes == null) {
+                Slider(
+                    value = value,
+                    valueRange = valueRange,
+                    onValueChange = onValueChange,
+                    onValueChangeFinished = onValueChangeFinished,
+                    colors = PlayerSliderColors.standardSliderColors(activeColor),
+                    modifier = modifier,
+                )
+            } else {
+                Slider(
+                    value = value,
+                    valueRange = valueRange,
+                    onValueChange = onValueChange,
+                    onValueChangeFinished = onValueChangeFinished,
+                    colors = PlayerSliderColors.standardSliderColors(activeColor),
+                    thumb = { Spacer(modifier = Modifier.size(0.dp)) },
+                    track = { sliderState ->
+                        WaveformSliderTrack(
+                            sliderState = sliderState,
+                            amplitudes = waveformAmplitudes,
+                            activeColor = activeColor,
+                        )
+                    },
+                    modifier = modifier,
+                )
+            }
         }
     }
 }
@@ -999,25 +1047,22 @@ fun PlayerPlaybackControls(
 
                     Spacer(modifier = Modifier.width(16.dp))
 
-                    FilledIconButton(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            if (playbackState == STATE_ENDED) {
-                                playerConnection.player.seekTo(0, 0)
-                                playerConnection.player.playWhenReady = true
-                            } else {
-                                playerConnection.player.togglePlayPause()
-                            }
-                        },
-                        colors =
-                            IconButtonDefaults.filledIconButtonColors(
-                                containerColor = textButtonColor,
-                                contentColor = iconButtonColor,
-                            ),
+                    Box(
                         modifier =
                             Modifier
                                 .size(width = playButtonWidth, height = playButtonHeight)
-                                .clip(RoundedCornerShape(32.dp)),
+                                .clip(RoundedCornerShape(32.dp))
+                                .background(textButtonColor)
+                                .playPauseClickable(playerConnection.player) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    if (playbackState == STATE_ENDED) {
+                                        playerConnection.player.seekTo(0, 0)
+                                        playerConnection.player.playWhenReady = true
+                                    } else {
+                                        playerConnection.player.togglePlayPause()
+                                    }
+                            },
+                        contentAlignment = Alignment.Center,
                     ) {
                         if (isLoading) {
                             CircularWavyProgressIndicator(
@@ -1129,7 +1174,7 @@ fun PlayerPlaybackControls(
                                 .size(70.dp)
                                 .clip(RoundedCornerShape(50))
                                 .background(textBackgroundColor)
-                                .clickable {
+                                .playPauseClickable(playerConnection.player) {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     if (playbackState == STATE_ENDED) {
                                         playerConnection.player.seekTo(0, 0)
@@ -1318,7 +1363,13 @@ fun PlayerPlaybackControls(
                     }
 
                     Surface(
-                        onClick = {
+                        shape = RoundedCornerShape(cinematicPlayPauseCorner),
+                        color = textButtonColor,
+                        modifier =
+                            Modifier
+                                .padding(horizontal = 20.dp)
+                                .size(88.dp)
+                                .playPauseClickable(playerConnection.player) {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             if (playbackState == STATE_ENDED) {
                                 playerConnection.player.seekTo(0, 0)
@@ -1326,13 +1377,7 @@ fun PlayerPlaybackControls(
                             } else {
                                 playerConnection.player.togglePlayPause()
                             }
-                        },
-                        shape = RoundedCornerShape(cinematicPlayPauseCorner),
-                        color = textButtonColor,
-                        modifier =
-                            Modifier
-                                .padding(horizontal = 20.dp)
-                                .size(88.dp),
+                                },
                     ) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -1495,7 +1540,7 @@ fun PlayerPlaybackControls(
                             .size(72.dp)
                             .clip(RoundedCornerShape(playPauseRoundness))
                             .background(textButtonColor)
-                            .clickable {
+                            .playPauseClickable(playerConnection.player) {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 if (playbackState == STATE_ENDED) {
                                     playerConnection.player.seekTo(0, 0)
@@ -1629,7 +1674,12 @@ fun PlayerPlaybackControls(
                         Spacer(modifier = Modifier.width(6.dp))
 
                         Surface(
-                            onClick = {
+                            shape = RoundedCornerShape(28.dp),
+                            color = textButtonColor,
+                            modifier =
+                                Modifier
+                                    .size(width = 88.dp, height = 80.dp)
+                                    .playPauseClickable(playerConnection.player) {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 if (playbackState == STATE_ENDED) {
                                     playerConnection.player.seekTo(0, 0)
@@ -1637,12 +1687,7 @@ fun PlayerPlaybackControls(
                                 } else {
                                     playerConnection.player.togglePlayPause()
                                 }
-                            },
-                            shape = RoundedCornerShape(28.dp),
-                            color = textButtonColor,
-                            modifier =
-                                Modifier
-                                    .size(width = 88.dp, height = 80.dp),
+                                    },
                         ) {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
@@ -1818,6 +1863,7 @@ fun PlayerControlsContent(
     mediaMetadata: MediaMetadata,
     playerDesignStyle: PlayerDesignStyle,
     sliderStyle: SliderStyle,
+    waveformAmplitudes: ImmutableList<Float>?,
     playbackState: Int,
     isPlaying: Boolean,
     isLoading: Boolean,
@@ -1889,6 +1935,7 @@ fun PlayerControlsContent(
 
     PlayerSlider(
         sliderStyle = sliderStyle,
+        waveformAmplitudes = waveformAmplitudes,
         sliderPosition = sliderPosition,
         position = position,
         duration = duration,
@@ -2863,6 +2910,7 @@ private fun V8TransportControls(
     onNextClick: () -> Unit,
 ) {
     val haptic = LocalHapticFeedback.current
+    val playerConnection = LocalPlayerConnection.current ?: return
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -2883,13 +2931,12 @@ private fun V8TransportControls(
         )
 
         Surface(
-            onClick = {
+            shape = CircleShape,
+            color = Color.Transparent,
+            modifier = Modifier.size(72.dp).playPauseClickable(playerConnection.player) {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 onPlayPauseClick()
             },
-            shape = CircleShape,
-            color = Color.Transparent,
-            modifier = Modifier.size(72.dp),
         ) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -3078,6 +3125,7 @@ fun V9PlayerContent(
     modifier: Modifier = Modifier,
     landscape: Boolean = false,
     gradientColors: List<Color> = emptyList(),
+    onQueueLongClick: () -> Unit = {},
 ) {
     val baseArtworkUrl = mediaMetadata.thumbnailUrl?.highRes()
     val thumbnailSwapState =
@@ -3153,6 +3201,7 @@ fun V9PlayerContent(
             iconButtonColor = iconButtonColor,
             onCollapseClick = onCollapseClick,
             onQueueClick = onQueueClick,
+            onQueueLongClick = onQueueLongClick,
             onLyricsClick = onLyricsClick,
             onTitleClick = onTitleClick,
             onArtistClick = onArtistClick,
@@ -3190,6 +3239,7 @@ fun V9PlayerContent(
             iconButtonColor = iconButtonColor,
             onCollapseClick = onCollapseClick,
             onQueueClick = onQueueClick,
+            onQueueLongClick = onQueueLongClick,
             onLyricsClick = onLyricsClick,
             onTitleClick = onTitleClick,
             onArtistClick = onArtistClick,
@@ -3238,6 +3288,7 @@ private fun V9PortraitContent(
     onArtistClick: (artistId: String) -> Unit,
     liked: Boolean,
     onToggleLike: () -> Unit,
+    onQueueLongClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -3269,6 +3320,7 @@ private fun V9PortraitContent(
                 onCollapseClick = onCollapseClick,
                 onLyricsClick = onLyricsClick,
                 onQueueClick = onQueueClick,
+                onQueueLongClick = onQueueLongClick,
             )
 
             Spacer(Modifier.height(headerGap))
@@ -3463,6 +3515,7 @@ private fun V9LandscapeContent(
     onShuffleClick: () -> Unit,
     onRepeatClick: () -> Unit,
     onMenuClick: () -> Unit,
+    onQueueLongClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -3503,6 +3556,7 @@ private fun V9LandscapeContent(
                     onCollapseClick = onCollapseClick,
                     onLyricsClick = onLyricsClick,
                     onQueueClick = onQueueClick,
+                    onQueueLongClick = onQueueLongClick,
                 )
 
                 Spacer(Modifier.height(14.dp))
@@ -3578,6 +3632,7 @@ private fun V9Header(
     onCollapseClick: () -> Unit,
     onLyricsClick: () -> Unit,
     onQueueClick: () -> Unit,
+    onQueueLongClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -3625,6 +3680,7 @@ private fun V9Header(
                 iconColor = iconColor,
                 shape = RoundedCornerShape(22.dp),
                 onClick = onQueueClick,
+                onLongClick = onQueueLongClick,
             )
         }
     }
@@ -3638,12 +3694,18 @@ private fun V9HeaderButton(
     iconColor: Color,
     shape: androidx.compose.ui.graphics.Shape,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
 ) {
     Surface(
-        onClick = onClick,
         shape = shape,
         color = containerColor,
-        modifier = Modifier.size(56.dp),
+        modifier =
+            Modifier
+                .size(56.dp)
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                ),
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -4452,6 +4514,7 @@ fun V10PlayerContent(
     onAddToPlaylistClick: () -> Unit,
     modifier: Modifier = Modifier,
     landscape: Boolean = false,
+    onQueueLongClick: () -> Unit = {},
 ) {
     val baseArtworkUrl = mediaMetadata.thumbnailUrl?.highRes()
     val thumbnailSwapState =
@@ -4839,7 +4902,17 @@ fun V10PlayerContent(
                     accent = accent,
                     field = field,
                     iconResId = R.drawable.library_add,
-                    contentDescription = "Add to playlist"
+                    contentDescription = stringResource(R.string.add_to_playlist)
+                )
+
+                V10ToggleButton(
+                    checked = false,
+                    onClick = onQueueClick,
+                    onLongClick = onQueueLongClick,
+                    accent = accent,
+                    field = field,
+                    iconResId = R.drawable.queue_music,
+                    contentDescription = stringResource(R.string.queue)
                 )
             }
         }
@@ -5032,6 +5105,7 @@ private fun V10ToggleButton(
     field: Color,
     iconResId: Int,
     contentDescription: String?,
+    onLongClick: (() -> Unit)? = null,
 ) {
     val containerColor by animateColorAsState(
         targetValue = if (checked) accent else accent.copy(alpha = 0.08f),
@@ -5044,7 +5118,10 @@ private fun V10ToggleButton(
             .size(48.dp)
             .clip(CircleShape)
             .background(containerColor)
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         CompositionLocalProvider(LocalContentColor provides contentColor) {
@@ -5106,4 +5183,3 @@ internal fun formatEditorialTime(durationMs: Long): String {
     val seconds = totalSeconds % 60
     return String.format("%d:%02d", minutes, seconds)
 }
-
