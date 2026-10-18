@@ -173,6 +173,7 @@ enum class SliderStyle {
     Thick,
     Circular,
     Simple,
+    Waveform,
 }
 
 const val SYSTEM_DEFAULT = "SYSTEM_DEFAULT"
@@ -354,6 +355,8 @@ val StorageFolderIdKey = stringPreferencesKey("storageFolderId")
 val StorageFolderTreeUriKey = stringPreferencesKey("storageFolderTreeUri")
 val StorageFolderPathKey = stringPreferencesKey("storageFolderPath")
 val StorageFolderDisplayNameKey = stringPreferencesKey("storageFolderDisplayName")
+val DownloadFolderTreeUriKey = stringPreferencesKey("downloadFolderTreeUri")
+val DownloadFolderDisplayNameKey = stringPreferencesKey("downloadFolderDisplayName")
 
 val PauseListenHistoryKey = booleanPreferencesKey("pauseListenHistory")
 val PauseSearchHistoryKey = booleanPreferencesKey("pauseSearchHistory")

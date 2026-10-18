@@ -92,11 +92,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.RichTooltip
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
@@ -2115,29 +2117,6 @@ class MainActivity : ComponentActivity() {
                                                                 )
                                                             }
                                                         }
-                                                        IconButton(
-                                                            onClick = {
-                                                                searchSource =
-                                                                    if (searchSource ==
-                                                                        SearchSource.ONLINE
-                                                                    ) {
-                                                                        SearchSource.LOCAL
-                                                                    } else {
-                                                                        SearchSource.ONLINE
-                                                                    }
-                                                            },
-                                                        ) {
-                                                            Icon(
-                                                                painter =
-                                                                    painterResource(
-                                                                        when (searchSource) {
-                                                                            SearchSource.LOCAL -> R.drawable.library_music
-                                                                            SearchSource.ONLINE -> R.drawable.language
-                                                                        },
-                                                                    ),
-                                                                contentDescription = null,
-                                                            )
-                                                        }
                                                     } else if (currentRoute?.startsWith(OnlineSearchResultRoutePrefix) == true) {
                                                         OnlineSearchSortMenu(
                                                             selectedSort = onlineSearchSort,
@@ -2174,43 +2153,66 @@ class MainActivity : ComponentActivity() {
                                                     )
                                                 },
                                         ) {
-                                            Crossfade(
-                                                targetState = searchSource,
-                                                animationSpec = tween(durationMillis = if (disableAnimations) 0 else 300),
-                                                label = "",
+                                            Column(
                                                 modifier =
                                                     Modifier
                                                         .fillMaxSize()
                                                         .padding(
                                                             bottom = if (!playerBottomSheetState.isDismissed) MiniPlayerHeight else 0.dp,
                                                         ).navigationBarsPadding(),
-                                            ) { searchSource ->
-                                                when (searchSource) {
-                                                    SearchSource.LOCAL -> {
-                                                        LocalSearchScreen(
-                                                            query = query.text,
-                                                            navController = navController,
-                                                            onDismiss = { onActiveChange(false) },
-                                                            pureBlack = pureBlack,
+                                            ) {
+                                                val searchTabs =
+                                                    listOf(
+                                                        SearchSource.LOCAL to R.string.search_library,
+                                                        SearchSource.ONLINE to R.string.search_yt_music,
+                                                    )
+                                                PrimaryTabRow(
+                                                    selectedTabIndex =
+                                                        searchTabs.indexOfFirst { (source, _) ->
+                                                            source == searchSource
+                                                        },
+                                                ) {
+                                                    searchTabs.forEach { (source, titleResId) ->
+                                                        Tab(
+                                                            selected = searchSource == source,
+                                                            onClick = { searchSource = source },
+                                                            text = { Text(stringResource(titleResId)) },
                                                         )
                                                     }
+                                                }
+                                                Crossfade(
+                                                    targetState = searchSource,
+                                                    animationSpec = tween(durationMillis = if (disableAnimations) 0 else 300),
+                                                    label = "",
+                                                    modifier = Modifier.weight(1f),
+                                                ) { searchSource ->
+                                                    when (searchSource) {
+                                                        SearchSource.LOCAL -> {
+                                                            LocalSearchScreen(
+                                                                query = query.text,
+                                                                navController = navController,
+                                                                onDismiss = { onActiveChange(false) },
+                                                                pureBlack = pureBlack,
+                                                            )
+                                                        }
 
-                                                    SearchSource.ONLINE -> {
-                                                        OnlineSearchScreen(
-                                                            query = query.text,
-                                                            onQueryChange = onQueryChange,
-                                                            navController = navController,
-                                                            onSearch = {
-                                                                navController.navigate(onlineSearchResultRoute(it))
-                                                                if (!pauseSearchHistory) {
-                                                                    database.query {
-                                                                        insert(SearchHistory(query = it))
+                                                        SearchSource.ONLINE -> {
+                                                            OnlineSearchScreen(
+                                                                query = query.text,
+                                                                onQueryChange = onQueryChange,
+                                                                navController = navController,
+                                                                onSearch = {
+                                                                    navController.navigate(onlineSearchResultRoute(it))
+                                                                    if (!pauseSearchHistory) {
+                                                                        database.query {
+                                                                            insert(SearchHistory(query = it))
+                                                                        }
                                                                     }
-                                                                }
-                                                            },
-                                                            onDismiss = { onActiveChange(false) },
-                                                            pureBlack = pureBlack,
-                                                        )
+                                                                },
+                                                                onDismiss = { onActiveChange(false) },
+                                                                pureBlack = pureBlack,
+                                                            )
+                                                        }
                                                     }
                                                 }
                                             }
