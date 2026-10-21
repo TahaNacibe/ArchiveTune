@@ -10,7 +10,6 @@
 package moe.rukamori.archivetune.ui.player
 
 import android.content.Context
-import android.content.res.Configuration
 import android.database.ContentObserver
 import android.graphics.Bitmap
 import android.media.AudioManager
@@ -73,6 +72,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -114,7 +114,6 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
@@ -131,6 +130,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.C
 import androidx.media3.common.Player.STATE_BUFFERING
+import androidx.media3.common.Player.STATE_ENDED
 import androidx.media3.common.Player.STATE_READY
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -144,6 +144,7 @@ import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.request.allowHardware
 import coil3.toBitmap
+import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -158,6 +159,8 @@ import moe.rukamori.archivetune.LocalDownloadUtil
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.canvas.CanvasPlaybackRequest
+import moe.rukamori.archivetune.ui.utils.navigateToAlbum
+import moe.rukamori.archivetune.ui.utils.navigateToArtist
 import moe.rukamori.archivetune.viewmodels.CanvasPlaybackViewModel
 import moe.rukamori.archivetune.viewmodels.CanvasPlaybackState
 import moe.rukamori.archivetune.viewmodels.ImmersivePlayerViewModel
@@ -170,6 +173,7 @@ import moe.rukamori.archivetune.constants.BlurRadiusKey
 import moe.rukamori.archivetune.constants.DarkModeKey
 import moe.rukamori.archivetune.constants.DisableBlurKey
 import moe.rukamori.archivetune.constants.EnableHapticFeedbackKey
+import moe.rukamori.archivetune.constants.NavigationBarMode
 import moe.rukamori.archivetune.constants.PlayerBackgroundStyle
 import moe.rukamori.archivetune.constants.PlayerBackgroundStyleKey
 import moe.rukamori.archivetune.constants.PlayerButtonsStyle
@@ -306,9 +310,11 @@ internal fun rememberDeviceMusicVolumeController(): DeviceMusicVolumeController 
 fun BottomSheetPlayer(
     state: BottomSheetState,
     navController: NavController,
+    hazeState: HazeState,
     modifier: Modifier = Modifier,
     pureBlack: Boolean,
     navigationProximityProvider: () -> Float = { 0f },
+    navigationBarMode: NavigationBarMode = NavigationBarMode.CONNECTED,
     canvasViewModel: CanvasPlaybackViewModel = hiltViewModel(),
     immersivePlayerViewModel: ImmersivePlayerViewModel = hiltViewModel(),
     waveformViewModel: PlaybackWaveformViewModel = hiltViewModel(),
@@ -860,11 +866,11 @@ fun BottomSheetPlayer(
             when (event) {
                 is ImmersivePlayerEvent.OpenAlbum -> {
                     state.collapseSoft()
-                    navController.navigate("album/${event.id}")
+                    navController.navigateToAlbum(event.id)
                 }
                 is ImmersivePlayerEvent.OpenArtist -> {
                     state.collapseSoft()
-                    navController.navigate("artist/${event.id}")
+                    navController.navigateToArtist(event.id)
                 }
                 ImmersivePlayerEvent.OpenMenu -> {
                     val metadata = mediaMetadata ?: return@collect
@@ -1019,73 +1025,19 @@ fun BottomSheetPlayer(
                 isLyricsScreenVisible = false
                 try {
                     state.expandSoft()
-                    QueueOpenDiagnostics.record(attemptId, "Requested player sheet expansion.")
-                    queueSheetState.expandSoft()
-                    QueueOpenDiagnostics.record(attemptId, "Requested queue sheet expansion.")
-                    queueDiagnosticsScope.launch {
-                        try {
-                            val finalState =
-                                withTimeoutOrNull(8_000L) {
-                                    snapshotFlow {
-                                        listOf(
-                                            state.isExpanded,
-                                            state.isExpandedOrExpanding,
-                                            queueSheetState.isExpanded,
-                                            queueSheetState.isExpandedOrExpanding,
-                                        )
-                                    }.distinctUntilChanged()
-                                        .onEach { values ->
-                                            QueueOpenDiagnostics.record(
-                                                attemptId,
-                                                "Observed state: playerExpanded=${values[0]}, " +
-                                                    "playerTargetExpanded=${values[1]}, " +
-                                                    "queueExpanded=${values[2]}, " +
-                                                    "queueTargetExpanded=${values[3]}.",
-                                            )
-                                        }
-                                        .first { values -> values[2] }
-                                }
-                            if (finalState == null) {
-                                QueueOpenDiagnostics.record(
-                                    attemptId,
-                                    "TIMEOUT: queue sheet did not reach expanded state within 8 seconds.",
-                                )
-                            } else {
-                                QueueOpenDiagnostics.record(attemptId, "Queue sheet reached expanded state.")
-                            }
-                        } catch (cancelled: CancellationException) {
-                            throw cancelled
-                        } catch (error: Exception) {
-                            QueueOpenDiagnostics.record(
-                                attemptId,
-                                "EXCEPTION while observing queue state: ${Log.getStackTraceString(error)}",
-                            )
-                            Timber.e(error, "Queue open state observer failed")
-                        }
-                    }
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (error: Exception) {
-                    QueueOpenDiagnostics.record(
-                        attemptId,
-                        "EXCEPTION while requesting queue: ${Log.getStackTraceString(error)}",
-                    )
-                    Timber.e(error, "Queue open request failed")
                 }
-                Unit
+                queueSheetState.expandSoft()
             }
         }
-    if (!aodModeEnabled) {
-        BackHandler(
-            enabled =
-                queueSheetState.isExpandedOrExpanding ||
-                    state.isExpandedOrExpanding,
-        ) {
-            when {
-                isLyricsScreenVisible && state.isExpandedOrExpanding -> isLyricsScreenVisible = false
-                queueSheetState.isExpandedOrExpanding -> queueSheetState.collapseSoft()
-                state.isExpandedOrExpanding -> state.collapseSoft()
-            }
+
+    val isPlayerVisible by remember(state) {
+        derivedStateOf { state.isExpandedOrExpanding || state.progress > 0f }
+    }
+    BackHandler(enabled = !aodModeEnabled && isPlayerVisible) {
+        when {
+            isLyricsScreenVisible -> isLyricsScreenVisible = false
+            queueSheetState.isExpandedOrExpanding -> queueSheetState.collapseSoft()
+            state.isExpandedOrExpanding -> state.collapseSoft()
         }
     }
 
@@ -1266,13 +1218,15 @@ fun BottomSheetPlayer(
         onDismiss = {
             playerConnection.service.stopAndClearPlayback(clearPersistentState = true)
         },
-        backHandlerEnabled = !aodModeEnabled,
+        backHandlerEnabled = false,
         collapsedContent = {
             MiniPlayer(
                 position = position,
                 duration = duration,
+                hazeState = hazeState,
                 pureBlack = pureBlack,
                 navigationProximityProvider = navigationProximityProvider,
+                navigationBarMode = navigationBarMode,
             )
         },
     ) {
@@ -1338,7 +1292,7 @@ fun BottomSheetPlayer(
             ?.video
         val artworkCanvas = resolvedCanvas
 
-        val controlsContent: @Composable ColumnScope.(MediaMetadata) -> Unit = { mediaMetadata ->
+        val controlsContent: @Composable ColumnScope.(MediaMetadata, Boolean) -> Unit = { mediaMetadata, landscape ->
             PlayerControlsContent(
                 mediaMetadata = mediaMetadata,
                 playerDesignStyle = playerDesignStyle,
@@ -1366,6 +1320,7 @@ fun BottomSheetPlayer(
                 onSliderValueChange = onSliderValueChange,
                 onSliderValueChangeFinished = onSliderValueChangeFinished,
                 currentFormat = if (playerDesignStyle == PlayerDesignStyle.V7) currentFormat else null,
+                landscape = landscape,
             )
         }
 
@@ -1392,8 +1347,8 @@ fun BottomSheetPlayer(
 
 // distance
 
-        when (LocalConfiguration.current.orientation) {
-            Configuration.ORIENTATION_LANDSCAPE -> {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            if (maxWidth > maxHeight) {
                 if (playerDesignStyle == PlayerDesignStyle.V5) {
                     val littleBackground = MaterialTheme.colorScheme.primaryContainer
                     val littleTextColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -1460,6 +1415,14 @@ fun BottomSheetPlayer(
                                                 mediaMetadata = metadata,
                                                 navController = navController,
                                                 playerBottomSheetState = state,
+                                                sleepTimerEnabled = sleepTimerEnabled,
+                                                onSleepTimerClick = {
+                                                    if (sleepTimerEnabled) {
+                                                        playerConnection.service.sleepTimer.clear()
+                                                    } else {
+                                                        showSleepTimerDialog = true
+                                                    }
+                                                },
                                                 onShowDetailsDialog = {
                                                     bottomSheetPageState.show {
                                                         ShowMediaInfo(metadata.id)
@@ -1537,7 +1500,7 @@ fun BottomSheetPlayer(
                                         .padding(bottom = queueSheetState.collapsedBound)
                                         .windowInsetsPadding(
                                             WindowInsets.systemBars.only(
-                                                WindowInsetsSides.Top + WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
+                                                WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
                                             ),
                                         ).nestedScroll(state.preUpPostDownNestedScrollConnection),
                             )
@@ -1578,7 +1541,7 @@ fun BottomSheetPlayer(
                                     .padding(bottom = queueSheetState.collapsedBound)
                                     .windowInsetsPadding(
                                         WindowInsets.systemBars.only(
-                                            WindowInsetsSides.Top + WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
+                                            WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
                                         ),
                                     ).nestedScroll(state.preUpPostDownNestedScrollConnection),
                         )
@@ -1622,6 +1585,14 @@ fun BottomSheetPlayer(
                                         mediaMetadata = metadata,
                                         navController = navController,
                                         playerBottomSheetState = state,
+                                        sleepTimerEnabled = sleepTimerEnabled,
+                                        onSleepTimerClick = {
+                                            if (sleepTimerEnabled) {
+                                                playerConnection.service.sleepTimer.clear()
+                                            } else {
+                                                showSleepTimerDialog = true
+                                            }
+                                        },
                                         onShowDetailsDialog = {
                                             bottomSheetPageState.show {
                                                 ShowMediaInfo(metadata.id)
@@ -1641,52 +1612,37 @@ fun BottomSheetPlayer(
                                     .padding(bottom = queueSheetState.collapsedBound)
                                     .windowInsetsPadding(
                                         WindowInsets.systemBars.only(
-                                            WindowInsetsSides.Top + WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
+                                            WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
                                         ),
                                     )
                                     .nestedScroll(state.preUpPostDownNestedScrollConnection),
                         )
                     }
                 } else {
-                    Row(
-                        modifier =
-                            Modifier
-                                .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal))
-                                .padding(bottom = queueSheetState.collapsedBound + 48.dp),
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            val screenWidth = LocalConfiguration.current.screenWidthDp
-                            val thumbnailSize = (screenWidth * 0.4).dp
+                    LandscapePlayerLayout(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(bottom = queueSheetState.collapsedBound)
+                            .windowInsetsPadding(
+                                WindowInsets.systemBars.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+                            ),
+                        artwork = {
                             Thumbnail(
                                 canvas = artworkCanvas,
                                 sliderPositionProvider = { sliderPosition },
-                                modifier = Modifier.size(thumbnailSize),
+                                modifier = Modifier.fillMaxSize(),
                                 isPlayerExpanded = state.isExpanded,
+                                applyStatusBarPadding = false,
                             )
-                        }
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier =
-                                Modifier
-                                    .weight(1f)
-                                    .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top)),
-                        ) {
-                            Spacer(Modifier.weight(1f))
-
-                            enrichedMetadata?.let {
-                                controlsContent(it)
+                        },
+                        controls = {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                enrichedMetadata?.let { controlsContent(it, true) }
                             }
-
-                            Spacer(Modifier.weight(1f))
-                        }
-                    }
+                        },
+                    )
                 }
-            }
-
-            else -> {
+            } else {
                 if (playerDesignStyle == PlayerDesignStyle.V5) {
                     val littleBackground = MaterialTheme.colorScheme.primaryContainer
                     val littleTextColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -1755,6 +1711,14 @@ fun BottomSheetPlayer(
                                                     mediaMetadata = metadata,
                                                     navController = navController,
                                                     playerBottomSheetState = state,
+                                                    sleepTimerEnabled = sleepTimerEnabled,
+                                                    onSleepTimerClick = {
+                                                        if (sleepTimerEnabled) {
+                                                            playerConnection.service.sleepTimer.clear()
+                                                        } else {
+                                                            showSleepTimerDialog = true
+                                                        }
+                                                    },
                                                     onShowDetailsDialog = {
                                                         bottomSheetPageState.show {
                                                             ShowMediaInfo(metadata.id)
@@ -1916,6 +1880,14 @@ fun BottomSheetPlayer(
                                         mediaMetadata = metadata,
                                         navController = navController,
                                         playerBottomSheetState = state,
+                                        sleepTimerEnabled = sleepTimerEnabled,
+                                        onSleepTimerClick = {
+                                            if (sleepTimerEnabled) {
+                                                playerConnection.service.sleepTimer.clear()
+                                            } else {
+                                                showSleepTimerDialog = true
+                                            }
+                                        },
                                         onShowDetailsDialog = {
                                             bottomSheetPageState.show {
                                                 ShowMediaInfo(metadata.id)
@@ -1965,7 +1937,7 @@ fun BottomSheetPlayer(
                         }
 
                         enrichedMetadata?.let {
-                            controlsContent(it)
+                            controlsContent(it, false)
                         }
 
                         Spacer(Modifier.height(30.dp))

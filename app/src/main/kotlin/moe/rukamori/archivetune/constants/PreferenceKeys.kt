@@ -100,6 +100,8 @@ val BackdropEnabledKey = booleanPreferencesKey("backdropEnabled")
 val BackdropBlurAmountKey = intPreferencesKey("backdropBlurAmount")
 val MiniPlayerLastAnchorKey = intPreferencesKey("miniPlayerLastAnchor")
 val MiniPlayerBackgroundStyleKey = stringPreferencesKey("miniPlayerBackgroundStyle")
+val NavigationBarBackgroundStyleKey = stringPreferencesKey("navigationBarBackgroundStyle")
+val NavigationBarModeKey = stringPreferencesKey("navigationBarMode")
 
 enum class AodThumbnailShape {
     ROUNDED,
@@ -252,6 +254,7 @@ val AiApiValidationStatusKey = stringPreferencesKey("ai_api_validation_status")
 val AiSelectedModelKey = stringPreferencesKey("ai_selected_model")
 val AiCustomModelKey = stringPreferencesKey("ai_custom_model")
 val AiCustomPromptKey = stringPreferencesKey("ai_custom_prompt")
+val AiRequestParametersKey = stringPreferencesKey("ai_request_parameters")
 
 enum class AiProvider {
     CHATGPT,
@@ -319,7 +322,6 @@ val CrossfadeGaplessKey = booleanPreferencesKey("crossfadeGapless")
 val AutoLoadMoreKey = booleanPreferencesKey("autoLoadMore")
 val AutoDownloadOnLikeKey = booleanPreferencesKey("autoDownloadOnLike")
 val AutoSkipNextOnErrorKey = booleanPreferencesKey("autoSkipNextOnError")
-val PreventAudioInterruptionsKey = booleanPreferencesKey("preventAudioInterruptions")
 val PauseOnDeviceMuteKey = booleanPreferencesKey("pauseOnDeviceMute")
 val DeviceMutePlaybackRecoveryVolumeKey = intPreferencesKey("deviceMutePlaybackRecoveryVolume")
 val AutoStartOnBluetoothKey = booleanPreferencesKey("autoStartOnBluetooth")
@@ -703,6 +705,19 @@ enum class MiniPlayerBackgroundStyle {
     THEME,
     GRADIENT,
     GLOW,
+    ACRYLIC,
+    BLUR,
+}
+
+enum class NavigationBarBackgroundStyle {
+    THEME,
+    BLUR,
+    ACRYLIC,
+}
+
+enum class NavigationBarMode {
+    CONNECTED,
+    STANDALONE,
 }
 
 // Keys for customized background

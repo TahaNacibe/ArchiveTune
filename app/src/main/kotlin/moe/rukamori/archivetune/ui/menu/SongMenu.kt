@@ -112,6 +112,8 @@ import moe.rukamori.archivetune.ui.component.SongListItem
 import moe.rukamori.archivetune.ui.component.TextFieldDialog
 import moe.rukamori.archivetune.ui.utils.ShowMediaInfo
 import moe.rukamori.archivetune.ui.utils.YtimgResizePolicy
+import moe.rukamori.archivetune.ui.utils.navigateToAlbum
+import moe.rukamori.archivetune.ui.utils.navigateToArtist
 import moe.rukamori.archivetune.ui.utils.resize
 import moe.rukamori.archivetune.utils.ExternalDownloaderLaunchResult
 import moe.rukamori.archivetune.utils.SpeedDialPin
@@ -427,7 +429,7 @@ fun SongMenu(
                             .fillMaxWidth()
                             .clickable {
                                 splitArtist.originalArtist?.let { artist ->
-                                    navController.navigate("artist/${artist.id}")
+                                    navController.navigateToArtist(artist.id)
                                     showSelectArtistDialog = false
                                     onDismiss()
                                 }
@@ -1054,7 +1056,7 @@ fun SongMenu(
                         modifier =
                             Modifier.clickable {
                                 if (splitArtists.size == 1 && splitArtists[0].originalArtist != null) {
-                                    navController.navigate("artist/${splitArtists[0].originalArtist!!.id}")
+                                    navController.navigateToArtist(splitArtists[0].originalArtist!!.id)
                                     onDismiss()
                                 } else {
                                     showSelectArtistDialog = true
@@ -1080,7 +1082,7 @@ fun SongMenu(
                             modifier =
                                 Modifier.clickable {
                                     onDismiss()
-                                    navController.navigate("album/${song.song.albumId}")
+                                    navController.navigateToAlbum(song.song.albumId)
                                 },
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                         )
