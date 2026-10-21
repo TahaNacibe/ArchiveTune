@@ -1952,6 +1952,22 @@ class MainActivity : ComponentActivity() {
                                                         }
                                                     },
                                                     actions = {
+                                                        TranslucentTopAppBarIconButton(
+                                                            onClick = { navController.navigate("history") },
+                                                        ) {
+                                                            Icon(
+                                                                painter = painterResource(R.drawable.history),
+                                                                contentDescription = stringResource(R.string.history),
+                                                            )
+                                                        }
+                                                        TranslucentTopAppBarIconButton(
+                                                            onClick = { navController.navigate("new_release") },
+                                                        ) {
+                                                            Icon(
+                                                                painter = painterResource(R.drawable.new_release),
+                                                                contentDescription = stringResource(R.string.new_releases),
+                                                            )
+                                                        }
                                                         val hasUpdateAvailable =
                                                             BuildConfig.UPDATER_AVAILABLE &&
                                                                 latestUpdateChannel == updateChannel &&
